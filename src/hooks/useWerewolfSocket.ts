@@ -26,8 +26,12 @@ export function useWerewolfSocket() {
       reconnectTimerRef.current = null;
     }
 
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws`;
+    const isGitHub = window.location.hostname.endsWith('github.io');
+    const backendHost = isGitHub 
+      ? 'ais-pre-y6e6de6rmualeckslw6ovv-766620080537.europe-west2.run.app' 
+      : window.location.host;
+    const protocol = (window.location.protocol === 'https:' || isGitHub) ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${backendHost}/ws`;
 
     try {
       const ws = new WebSocket(wsUrl);

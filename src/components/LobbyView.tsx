@@ -5,6 +5,12 @@ import { ALL_ROLES, PLAYABLE_SECRET_ROLES, DECK_PRESETS } from '../utils/roles';
 import { Play, Users, Sparkles, Copy, Check, QrCode, Shield, Settings2, Plus, Minus, Crown, ArrowRight } from 'lucide-react';
 import { sounds } from '../utils/sound';
 
+const ROLE_CATEGORIES = [
+  { id: 'alle', label: 'Alle Rollen', icon: '✨' },
+  { id: 'werewolves', label: 'Weerwolven 🐺', icon: '🐾' },
+  { id: 'village', label: 'Dorpelingen 🔮', icon: '🏡' },
+];
+
 interface LobbyViewProps {
   roomState: GameRoomState | null;
   myPlayerId: string;
@@ -30,6 +36,7 @@ export const LobbyView: React.FC<LobbyViewProps> = ({
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
   const [copiedLink, setCopiedLink] = useState(false);
   const [showQrModal, setShowQrModal] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<string>('alle');
 
   // Auto-read ?room= query param from URL if present
   useEffect(() => {
@@ -474,7 +481,7 @@ export const LobbyView: React.FC<LobbyViewProps> = ({
                 {PLAYABLE_SECRET_ROLES.filter((r) => {
                   if (r.id === 'burger' || r.id === 'weerwolf') return false;
                   if (selectedCategory === 'alle') return true;
-                  return r.category === selectedCategory;
+                  return r.team === selectedCategory;
                 }).map((r) => {
                   const count = roomState.selectedDeck.filter((id) => id === r.id).length;
                   return (
@@ -491,7 +498,9 @@ export const LobbyView: React.FC<LobbyViewProps> = ({
                         <span className="text-base">{r.icon}</span>
                         <div className="truncate">
                           <span className="truncate text-slate-200 block font-medium">{r.dutchName}</span>
-                          <span className="text-[10px] text-slate-400">{r.categoryLabel}</span>
+                          <span className="text-[10px] text-slate-400">
+                            {r.team === 'werewolves' ? 'Weerwolven' : 'Dorpeling'}
+                          </span>
                         </div>
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
