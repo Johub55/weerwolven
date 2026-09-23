@@ -15,7 +15,16 @@ export type RoleId =
   | 'meisje'
   | 'fluitspeler'
   | 'burgemeester'
-  | 'onbekend';
+  | 'onbekend'
+  | 'witte_weerwolf'
+  | 'wilde_kind'
+  | 'zondebok'
+  | 'dorpsgek'
+  | 'genezer'
+  | 'babbelzieke_weerwolf'
+  | 'grote_boze_wolf'
+  | 'sater'
+  | 'zigeunerin';
 
 export type Team = 'village' | 'werewolves' | 'lovers' | 'solo';
 

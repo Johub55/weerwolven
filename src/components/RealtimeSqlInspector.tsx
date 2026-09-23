@@ -38,14 +38,15 @@ export const RealtimeSqlInspector: React.FC<RealtimeSqlInspectorProps> = ({
   const templates = [
     { label: 'Alle Spelers & Rollen', sql: 'SELECT id, name, role, is_mayor, is_alive FROM players;' },
     { label: 'Alleen Levende Spelers', sql: 'SELECT id, name, role, is_mayor FROM players WHERE is_alive = true;' },
-    { label: 'Weerwolven Roedel', sql: "SELECT * FROM players WHERE role = 'weerwolf';" },
+    { label: 'Weerwolven Roedel', sql: "SELECT * FROM players WHERE role IN ('weerwolf', 'witte_weerwolf', 'babbelzieke_weerwolf', 'grote_boze_wolf');" },
     { label: 'Maak Burgemeester (SQL)', sql: "UPDATE players SET is_mayor = true WHERE name = 'Lisa';" },
+    { label: 'Vind Wilde Kind / Idioot', sql: "SELECT * FROM players WHERE role IN ('wilde_kind', 'dorpsgek');" },
     { label: 'Nachtbesluiten (Live)', sql: 'SELECT * FROM night_actions;' },
     { label: 'Recente Spellogboek', sql: 'SELECT * FROM game_logs;' },
     { label: 'Actieve Kamers & Status', sql: 'SELECT * FROM rooms;' },
     { label: 'Vermoord Speler via SQL', sql: "UPDATE players SET is_alive = false WHERE name = 'Peter';" },
     { label: 'Wek Speler tot Leven (SQL)', sql: "UPDATE players SET is_alive = true WHERE name = 'Peter';" },
-    { label: 'Wijzig Rol naar Weerwolf', sql: "UPDATE players SET role = 'weerwolf' WHERE name = 'Lisa';" },
+    { label: 'Wijzig Rol naar Witte Weerwolf', sql: "UPDATE players SET role = 'witte_weerwolf' WHERE name = 'Lisa';" },
   ];
 
   return (

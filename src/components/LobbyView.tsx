@@ -40,10 +40,11 @@ export const LobbyView: React.FC<LobbyViewProps> = ({
     }
   }, [roomState]);
 
-  // Generate QR Code when in room
+  // Generate QR Code when in room (supports subpaths like /weerwolven/ on GitHub Pages)
   useEffect(() => {
     if (roomState?.roomCode) {
-      const joinUrl = `${window.location.origin}/?room=${roomState.roomCode}`;
+      const pathname = window.location.pathname.endsWith('/') ? window.location.pathname : `${window.location.pathname}/`;
+      const joinUrl = `${window.location.origin}${pathname}?room=${roomState.roomCode}`;
       QRCode.toDataURL(joinUrl, { width: 300, margin: 2, color: { dark: '#020617', light: '#f59e0b' } })
         .then((url) => setQrDataUrl(url))
         .catch((e) => console.error('QR error', e));
@@ -54,7 +55,8 @@ export const LobbyView: React.FC<LobbyViewProps> = ({
 
   const handleCopyLink = () => {
     if (roomState?.roomCode) {
-      const joinUrl = `${window.location.origin}/?room=${roomState.roomCode}`;
+      const pathname = window.location.pathname.endsWith('/') ? window.location.pathname : `${window.location.pathname}/`;
+      const joinUrl = `${window.location.origin}${pathname}?room=${roomState.roomCode}`;
       navigator.clipboard.writeText(joinUrl);
       setCopiedLink(true);
       setTimeout(() => setCopiedLink(false), 2000);
@@ -363,29 +365,146 @@ export const LobbyView: React.FC<LobbyViewProps> = ({
 
           {/* Add more roles panel for Host */}
           {isHost && (
-            <div className="space-y-3">
+            <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                  Rol Toevoegen aan Deck:
+                  Rollen Toevoegen & Deck Samenstellen:
                 </span>
                 <span className="text-[11px] text-amber-300">
-                  👑 Burgemeester is een titel die in het spel wordt gekozen/toegewezen
+                  👑 Burgemeester is een publieke titel (geen kaart in deck)
                 </span>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {PLAYABLE_SECRET_ROLES.map((r) => (
-                  <button
-                    key={r.id}
-                    onClick={() => handleAddRoleToDeck(r.id)}
-                    className="flex items-center justify-between p-2.5 rounded-xl bg-slate-950 border border-slate-800 hover:border-amber-500/40 text-xs text-left transition hover:bg-slate-900 cursor-pointer"
-                  >
-                    <div className="flex items-center gap-2 truncate">
-                      <span className="text-base">{r.icon}</span>
-                      <span className="truncate text-slate-200">{r.dutchName}</span>
+
+              {/* Pinned Essential Roles Bar: Burgers & Weerwolven are ALWAYS visible and adjustable! */}
+              <div className="p-3.5 rounded-2xl bg-gradient-to-r from-amber-950/40 via-slate-900 to-red-950/40 border border-amber-500/30 space-y-2 shadow-inner">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-amber-400" /> Essentiële Basisrollen (Altijd Direct Aanpasbaar)
+                  </span>
+                  <span className="text-[10px] text-slate-400">Directe +/- zonder van categorie te wisselen</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {/* Pinned Burger */}
+                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-950/90 border border-amber-500/40">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">🌾</span>
+                      <div>
+                        <div className="text-xs font-bold text-amber-200">Burger (Dorpeling)</div>
+                        <div className="text-[10px] text-slate-400">
+                          {roomState.selectedDeck.filter((r) => r === 'burger').length} in deck
+                        </div>
+                      </div>
                     </div>
-                    <Plus className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => {
+                          const idx = roomState.selectedDeck.lastIndexOf('burger');
+                          if (idx !== -1) handleRemoveRoleFromDeck(idx);
+                        }}
+                        className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700"
+                        title="1 Burger minder"
+                      >
+                        <Minus className="w-3 h-3" />
+                      </button>
+                      <button
+                        onClick={() => handleAddRoleToDeck('burger')}
+                        className="px-2.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center gap-1"
+                        title="1 Burger toevoegen"
+                      >
+                        <Plus className="w-3 h-3" /> Toevoegen
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Pinned Weerwolf */}
+                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-950/90 border border-red-500/40">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">🐺</span>
+                      <div>
+                        <div className="text-xs font-bold text-red-300">Weerwolf (Roedel)</div>
+                        <div className="text-[10px] text-slate-400">
+                          {roomState.selectedDeck.filter((r) => r === 'weerwolf').length} in deck
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => {
+                          const idx = roomState.selectedDeck.lastIndexOf('weerwolf');
+                          if (idx !== -1) handleRemoveRoleFromDeck(idx);
+                        }}
+                        className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700"
+                        title="1 Weerwolf minder"
+                      >
+                        <Minus className="w-3 h-3" />
+                      </button>
+                      <button
+                        onClick={() => handleAddRoleToDeck('weerwolf')}
+                        className="px-2.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold text-xs flex items-center gap-1"
+                        title="1 Weerwolf toevoegen"
+                      >
+                        <Plus className="w-3 h-3" /> Toevoegen
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Category Filter Tabs */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+                {ROLE_CATEGORIES.map((cat) => (
+                  <button
+                    key={cat.id}
+                    onClick={() => setSelectedCategory(cat.id)}
+                    className={`px-3 py-1.5 rounded-xl text-xs whitespace-nowrap transition cursor-pointer flex items-center gap-1.5 ${
+                      selectedCategory === cat.id
+                        ? 'bg-amber-500 text-slate-950 font-bold shadow-md'
+                        : 'bg-slate-950 border border-slate-800 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <span>{cat.icon}</span>
+                    <span>{cat.label}</span>
                   </button>
                 ))}
+              </div>
+
+              {/* Filtered Expansion Roles Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {PLAYABLE_SECRET_ROLES.filter((r) => {
+                  if (r.id === 'burger' || r.id === 'weerwolf') return false;
+                  if (selectedCategory === 'alle') return true;
+                  return r.category === selectedCategory;
+                }).map((r) => {
+                  const count = roomState.selectedDeck.filter((id) => id === r.id).length;
+                  return (
+                    <button
+                      key={r.id}
+                      onClick={() => handleAddRoleToDeck(r.id)}
+                      className={`flex items-center justify-between p-2.5 rounded-xl border text-xs text-left transition hover:bg-slate-900 cursor-pointer ${
+                        count > 0
+                          ? 'bg-slate-900/90 border-amber-500/50'
+                          : 'bg-slate-950 border-slate-800 hover:border-amber-500/40'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 truncate">
+                        <span className="text-base">{r.icon}</span>
+                        <div className="truncate">
+                          <span className="truncate text-slate-200 block font-medium">{r.dutchName}</span>
+                          <span className="text-[10px] text-slate-400">{r.categoryLabel}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        {count > 0 && (
+                          <span className="px-1.5 py-0.5 rounded-md bg-amber-500/20 text-amber-300 font-mono text-[10px] font-bold">
+                            {count}x
+                          </span>
+                        )}
+                        <Plus className="w-3.5 h-3.5 text-amber-400" />
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}

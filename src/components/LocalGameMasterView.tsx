@@ -76,6 +76,70 @@ export const LocalGameMasterView: React.FC = () => {
 
   const [morningDeaths, setMorningDeaths] = useState<string[]>([]);
 
+  // New States for Custom Debate Timer, persistent recap log, and tabs
+  const [deckTab, setDeckTab] = useState<'all' | 'werewolves' | 'village' | 'special' | 'expansions'>('all');
+  const [timerSeconds, setTimerSeconds] = useState<number>(180); // Default 3 mins
+  const [timeLeft, setTimeLeft] = useState<number>(180);
+  const [isTimerRunning, setIsTimerRunning] = useState<boolean>(false);
+  
+  const [gameLog, setGameLog] = useState<{ id: string; timestamp: string; message: string; type: 'info' | 'death' | 'action' | 'mayor' }[]>([
+    { id: '1', timestamp: 'Ronde 1', message: 'Spel gestart in spelleider offline modus! Stel het deck samen en voeg de spelers toe.', type: 'info' }
+  ]);
+  const [showLogModal, setShowLogModal] = useState<boolean>(false);
+
+  // Helper to add logs
+  const addLogEntry = (type: 'info' | 'death' | 'action' | 'mayor', message: string) => {
+    const timeStr = `Nacht ${dayNumber}`;
+    setGameLog((prev) => [
+      { id: Math.random().toString(36).substring(2, 9), timestamp: timeStr, message, type },
+      ...prev,
+    ]);
+  };
+
+  // Timer countdown hook
+  React.useEffect(() => {
+    let interval: any = null;
+    if (isTimerRunning && timeLeft > 0) {
+      interval = setInterval(() => {
+        setTimeLeft((prev) => {
+          if (prev <= 1) {
+            setIsTimerRunning(false);
+            sounds.playLynchStrike();
+            try {
+              if (navigator.vibrate) {
+                navigator.vibrate([300, 100, 300, 100, 300]);
+              }
+            } catch (e) {}
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } else {
+      clearInterval(interval);
+    }
+    return () => clearInterval(interval);
+  }, [isTimerRunning, timeLeft]);
+
+  // Secure tactile vibration feedback trigger for Spelleider
+  const triggerSpelleiderVibrate = (pattern: number[]) => {
+    try {
+      if (navigator.vibrate) {
+        navigator.vibrate(pattern);
+      } else {
+        console.log('Tactile feedback: vibrating ', pattern);
+      }
+    } catch (e) {
+      console.warn('Vibration not supported or blocked: ', e);
+    }
+  };
+
+  const handleSelectTimerDuration = (seconds: number) => {
+    setTimerSeconds(seconds);
+    setTimeLeft(seconds);
+    setIsTimerRunning(false);
+  };
+
   // Add/Remove role in the physical deck
   const handleAddRoleToDeck = (roleId: RoleId) => {
     setSelectedDeck([...selectedDeck, roleId]);
@@ -219,22 +283,48 @@ export const LocalGameMasterView: React.FC = () => {
   };
 
   const handleUpdateRole = (playerId: string, role: RoleId) => {
-    setPlayers(players.map((p) => (p.id === playerId ? { ...p, role } : p)));
+    setPlayers(players.map((p) => {
+      if (p.id === playerId) {
+        if (p.role !== role) {
+          addLogEntry('action', `🎭 Rol van ${p.name} ingesteld op: ${ALL_ROLES[role]?.dutchName || role}`);
+        }
+        return { ...p, role };
+      }
+      return p;
+    }));
   };
 
   const handleToggleAlive = (playerId: string) => {
     setPlayers(
-      players.map((p) => (p.id === playerId ? { ...p, isAlive: !p.isAlive } : p))
+      players.map((p) => {
+        if (p.id === playerId) {
+          const nextAlive = !p.isAlive;
+          addLogEntry(
+            nextAlive ? 'info' : 'death',
+            nextAlive ? `❤️ ${p.name} is weer tot leven gewekt!` : `☠️ ${p.name} is overleden!`
+          );
+          return { ...p, isAlive: nextAlive };
+        }
+        return p;
+      })
     );
   };
 
   // Burgemeester is an honorary title! Toggle on/off without changing secret role.
   const handleToggleMayor = (playerId: string) => {
     setPlayers(
-      players.map((p) => ({
-        ...p,
-        isMayor: p.id === playerId ? !p.isMayor : false,
-      }))
+      players.map((p) => {
+        if (p.id === playerId) {
+          const nextMayor = !p.isMayor;
+          addLogEntry(
+            nextMayor ? 'mayor' : 'info',
+            nextMayor ? `👑 ${p.name} is tot nieuwe Burgemeester gekozen!` : `👑 ${p.name} heeft de ambtsketen overgedragen/neergelegd.`
+          );
+          return { ...p, isMayor: nextMayor };
+        }
+        // Only one mayor allowed
+        return { ...p, isMayor: false };
+      })
     );
   };
 
@@ -247,6 +337,7 @@ export const LocalGameMasterView: React.FC = () => {
     setWitchHeal(false);
     setWitchPoisonTarget('');
     setSeerPeekTarget('');
+    addLogEntry('info', `🌑 Nacht ${dayNumber + 1} valt over Wakkerdam...`);
     sounds.playWolfHowl();
   };
 
@@ -261,6 +352,7 @@ export const LocalGameMasterView: React.FC = () => {
       setWitchPoisonTarget('');
       setSeerPeekTarget('');
       setMorningDeaths([]);
+      setGameLog([{ id: '1', timestamp: 'Ronde 1', message: 'Nieuwe ronde gestart met dezelfde spelers! Spelleider start de Nachtwizard.', type: 'info' }]);
       setPlayers(
         players.map((p) => ({
           ...p,
@@ -281,20 +373,39 @@ export const LocalGameMasterView: React.FC = () => {
   const handleNextStep = () => {
     if (currentStep.id === 'witch') {
       const deaths: string[] = [];
+      const loggedDeaths: string[] = [];
       if (wolfTarget && wolfTarget !== guardTarget && !witchHeal) {
         const victim = players.find((p) => p.id === wolfTarget);
         if (victim) {
           deaths.push(victim.name);
           victim.isAlive = false;
+          loggedDeaths.push(`${victim.name} (verslonden door wolven 🐺)`);
+        }
+      } else if (wolfTarget && (wolfTarget === guardTarget || witchHeal)) {
+        if (wolfTarget === guardTarget) {
+          addLogEntry('action', `🛡️ Weerwolven probeerden aan te vallen, maar het slachtoffer werd gered door de Beschermer!`);
+        } else {
+          addLogEntry('action', `🧙‍♀️ Weerwolven probeerden aan te vallen, maar de Heks heeft haar Levensdrank gebruikt!`);
         }
       }
+
       if (witchPoisonTarget) {
         const victim = players.find((p) => p.id === witchPoisonTarget);
-        if (victim && !deaths.includes(victim.name)) {
-          deaths.push(victim.name);
-          victim.isAlive = false;
+        if (victim) {
+          if (!deaths.includes(victim.name)) {
+            deaths.push(victim.name);
+            victim.isAlive = false;
+          }
+          loggedDeaths.push(`${victim.name} (vergiftigd door de Heks 🧙‍♀️)`);
         }
       }
+
+      if (loggedDeaths.length > 0) {
+        addLogEntry('death', `💀 Vannacht gestorven: ${loggedDeaths.join(', ')}`);
+      } else {
+        addLogEntry('info', `🌅 Er zijn vannacht geen slachtoffers gevallen!`);
+      }
+
       setMorningDeaths(deaths);
     }
 
@@ -357,6 +468,20 @@ export const LocalGameMasterView: React.FC = () => {
         </p>
       </div>
 
+      {/* Persistent Floating Control Toolbar (Top Right) */}
+      <div className="fixed top-24 right-4 z-40 flex flex-col gap-2">
+        <button
+          onClick={() => setShowLogModal(true)}
+          className="px-4 py-2.5 rounded-full bg-slate-900 border border-amber-500 text-amber-300 hover:bg-amber-500 hover:text-slate-950 text-xs font-bold flex items-center gap-2 shadow-2xl transition hover:scale-105 active:scale-95 cursor-pointer"
+        >
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+          </span>
+          📜 Live Spellogboek ({gameLog.length})
+        </button>
+      </div>
+
       {gameState === 'setup' ? (
         <div className="space-y-6">
           {/* STEP 1: ROLLEN KIEZEN (Deck Builder) */}
@@ -405,50 +530,140 @@ export const LocalGameMasterView: React.FC = () => {
               </div>
             </div>
 
-            {/* Role Increment/Decrement Grid */}
-            <div className="space-y-1.5 pt-1">
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                Karakters & Aantallen Aanpassen (+ / -):
-              </span>
+            {/* Role Increment/Decrement Grid with Pinned Core Roles & Categorization */}
+            <div className="space-y-4 pt-1">
+              {/* Pinned Core Roles Section (Always Visible) */}
+              <div className="p-4 rounded-2xl bg-amber-500/5 border border-amber-500/20 space-y-2">
+                <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider block">
+                  📌 Basis Rollen (Altijd Pijlsnel Aanpassen):
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {deckRoleCounts
+                    .filter(({ role }) => role.id === 'burger' || role.id === 'weerwolf')
+                    .map(({ role, count }) => (
+                      <div
+                        key={role.id}
+                        className="p-3 rounded-xl bg-slate-950 border-2 border-amber-500/40 text-white flex items-center justify-between gap-2 shadow-md hover:bg-slate-900/60 transition"
+                      >
+                        <div className="flex items-center gap-2.5 truncate">
+                          <span className="text-2xl shrink-0">{role.icon}</span>
+                          <div className="truncate">
+                            <p className="text-xs font-bold text-amber-300 truncate">{role.dutchName}</p>
+                            <span className="text-[10px] text-slate-400 font-mono font-bold">
+                              Aantal kaarten: <strong className="text-white text-xs">{count}x</strong>
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            onClick={() => handleRemoveRoleFromDeck(role.id)}
+                            disabled={count === 0}
+                            className="w-8 h-8 rounded-lg bg-slate-900 hover:bg-red-950 hover:text-red-300 disabled:opacity-30 border border-slate-700 flex items-center justify-center text-xs transition cursor-pointer"
+                            title="Eén minder"
+                          >
+                            <Minus className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleAddRoleToDeck(role.id)}
+                            className="w-8 h-8 rounded-lg bg-slate-900 hover:bg-emerald-950 hover:text-emerald-300 border border-slate-700 flex items-center justify-center text-xs transition cursor-pointer"
+                            title="Eén meer"
+                          >
+                            <Plus className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+
+              {/* Category Filter Tabs */}
+              <div className="space-y-2">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+                  Sorteer Speciale Rollen &amp; Uitbreidingen:
+                </span>
+                <div className="flex flex-wrap gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800">
+                  {[
+                    { id: 'all', label: 'Alle Extra Kaarten ✨' },
+                    { id: 'werewolves', label: 'Weerwolven 🐺' },
+                    { id: 'village', label: 'Dorpelingen 🔮' },
+                    { id: 'special', label: 'Speciaal & Chaos 🎭' },
+                    { id: 'expansions', label: 'Volledige Uitbreidingen 🧪' },
+                  ].map((tab) => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setDeckTab(tab.id as any)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                        deckTab === tab.id
+                          ? 'bg-amber-500 text-slate-950 font-bold'
+                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Categorized Grid */}
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
-                {deckRoleCounts.map(({ role, count }) => (
-                  <div
-                    key={role.id}
-                    className={`p-2.5 rounded-2xl border flex items-center justify-between gap-2 transition ${
-                      count > 0
-                        ? 'bg-slate-950 border-amber-500/40 text-white'
-                        : 'bg-slate-950/40 border-slate-800 text-slate-500'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 truncate">
-                      <span className="text-xl shrink-0">{role.icon}</span>
-                      <div className="truncate">
-                        <p className="text-xs font-bold truncate leading-tight">{role.dutchName}</p>
-                        <span className="text-[10px] text-amber-400 font-mono font-bold">
-                          {count}x in spel
-                        </span>
+                {deckRoleCounts
+                  .filter(({ role }) => role.id !== 'burger' && role.id !== 'weerwolf')
+                  .filter(({ role }) => {
+                    const id = role.id;
+                    if (deckTab === 'all') return true;
+                    if (deckTab === 'werewolves') {
+                      return id === 'witte_weerwolf' || id === 'babbelzieke_weerwolf' || id === 'grote_boze_wolf';
+                    }
+                    if (deckTab === 'village') {
+                      return id === 'zienster' || id === 'heks' || id === 'jager' || id === 'cupido' || id === 'beschermer' || id === 'dief' || id === 'dorpsoudste' || id === 'meisje' || id === 'genezer' || id === 'zigeunerin';
+                    }
+                    if (deckTab === 'special') {
+                      return id === 'fluitspeler' || id === 'sater' || id === 'zondebok' || id === 'dorpsgek' || id === 'wilde_kind';
+                    }
+                    if (deckTab === 'expansions') {
+                      return ['witte_weerwolf', 'wilde_kind', 'zondebok', 'dorpsgek', 'genezer', 'babbelzieke_weerwolf', 'grote_boze_wolf', 'sater', 'zigeunerin'].includes(id);
+                    }
+                    return true;
+                  })
+                  .map(({ role, count }) => (
+                    <div
+                      key={role.id}
+                      className={`p-2.5 rounded-2xl border flex items-center justify-between gap-2 transition ${
+                        count > 0
+                          ? 'bg-slate-950 border-amber-500/40 text-white'
+                          : 'bg-slate-950/40 border-slate-800 text-slate-500'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 truncate">
+                        <span className="text-xl shrink-0">{role.icon}</span>
+                        <div className="truncate">
+                          <p className="text-xs font-bold truncate leading-tight">{role.dutchName}</p>
+                          <span className="text-[10px] text-amber-400 font-mono font-bold">
+                            {count}x in spel
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          onClick={() => handleRemoveRoleFromDeck(role.id)}
+                          disabled={count === 0}
+                          className="w-6 h-6 rounded-lg bg-slate-900 hover:bg-red-950 hover:text-red-300 disabled:opacity-30 border border-slate-700 flex items-center justify-center text-xs cursor-pointer"
+                          title="Eén minder"
+                        >
+                          <Minus className="w-3 h-3" />
+                        </button>
+                        <button
+                          onClick={() => handleAddRoleToDeck(role.id)}
+                          className="w-6 h-6 rounded-lg bg-slate-900 hover:bg-emerald-950 hover:text-emerald-300 border border-slate-700 flex items-center justify-center text-xs cursor-pointer"
+                          title="Eén meer toevoegen"
+                        >
+                          <Plus className="w-3 h-3" />
+                        </button>
                       </div>
                     </div>
-
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        onClick={() => handleRemoveRoleFromDeck(role.id)}
-                        disabled={count === 0}
-                        className="w-6 h-6 rounded-lg bg-slate-900 hover:bg-red-950 hover:text-red-300 disabled:opacity-30 border border-slate-700 flex items-center justify-center text-xs"
-                        title="Eén minder"
-                      >
-                        <Minus className="w-3 h-3" />
-                      </button>
-                      <button
-                        onClick={() => handleAddRoleToDeck(role.id)}
-                        className="w-6 h-6 rounded-lg bg-slate-900 hover:bg-emerald-950 hover:text-emerald-300 border border-slate-700 flex items-center justify-center text-xs"
-                        title="Eén meer toevoegen"
-                      >
-                        <Plus className="w-3 h-3" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  ))}
               </div>
             </div>
 
@@ -663,18 +878,140 @@ export const LocalGameMasterView: React.FC = () => {
             <div className="flex items-center gap-2">
               <button
                 onClick={handleNextStep}
-                className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs flex items-center gap-2 shadow-lg cursor-pointer"
+                className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs flex items-center gap-2 shadow-lg cursor-pointer animate-pulse"
               >
                 <span>Volgende Stap &gt;&gt;</span>
                 <SkipForward className="w-4 h-4" />
               </button>
               <button
                 onClick={() => setGameState('setup')}
-                className="p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-slate-300 hover:text-white"
+                className="p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-slate-300 hover:text-white transition"
                 title="Terug naar spelers- & rollenlijst"
               >
                 <RotateCcw className="w-4 h-4" />
               </button>
+            </div>
+          </div>
+
+          {/* GORGEOUS SANDGLASS TIMER & SPELLEIDER secured tactile triggers */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Sandglass Countdown */}
+            <div className="p-5 rounded-3xl bg-slate-900/95 border-2 border-amber-500/30 flex flex-col justify-between space-y-4 shadow-xl">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">⏱️</span>
+                  <div>
+                    <h4 className="text-sm font-cinzel font-bold text-white">Dorpsberaad Zandloper</h4>
+                    <p className="text-[10px] text-slate-400 font-medium">Beheer de spreektijd van het dorp en verdachten</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1">
+                  {[30, 60, 120, 180, 300, 480, 600].map((sec) => (
+                    <button
+                      key={sec}
+                      onClick={() => handleSelectTimerDuration(sec)}
+                      className={`px-1.5 py-1 text-[10px] font-mono font-bold rounded transition cursor-pointer ${
+                        timerSeconds === sec
+                          ? 'bg-amber-500 text-slate-950'
+                          : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
+                      }`}
+                    >
+                      {sec < 60 ? `${sec}s` : `${sec / 60}m`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Timer Progress Bar & Digits */}
+              <div className="bg-slate-950/80 p-4 rounded-2xl border border-slate-800 flex items-center justify-between gap-4">
+                <div className="text-left">
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Tijd Resterend</p>
+                  <p className="text-3xl font-mono font-bold text-amber-400">
+                    {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
+                  </p>
+                </div>
+
+                {/* Progress Visualizer */}
+                <div className="flex-1 max-w-[180px] bg-slate-900 h-2.5 rounded-full overflow-hidden border border-slate-800">
+                  <div
+                    className="bg-amber-500 h-full rounded-full transition-all duration-1000"
+                    style={{ width: `${(timeLeft / timerSeconds) * 100}%` }}
+                  />
+                </div>
+
+                {/* Action controls */}
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => setIsTimerRunning(!isTimerRunning)}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+                      isTimerRunning
+                        ? 'bg-red-600 hover:bg-red-500 text-white shadow-md'
+                        : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-md'
+                    }`}
+                  >
+                    {isTimerRunning ? 'Pauze ⏸️' : 'Start ▶️'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setTimeLeft(timerSeconds);
+                      setIsTimerRunning(false);
+                    }}
+                    className="p-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 text-xs transition"
+                    title="Reset timer"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Spelleider Tactical Vibrator & Sounds (Discreet Signals) */}
+            <div className="p-5 rounded-3xl bg-slate-900/95 border border-slate-800 flex flex-col justify-between space-y-3 shadow-xl">
+              <div>
+                <h4 className="text-sm font-cinzel font-bold text-white flex items-center gap-2">
+                  <span>🤫 Tactiele &amp; Geluidssignalen (Spelleider)</span>
+                </h4>
+                <p className="text-[10px] text-slate-400">
+                  Zend in stilte subtiele trilsignalen of geluiden naar je telefoon om beslissingen te ondersteunen zonder de spelerposities te verraden.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <button
+                  onClick={() => triggerSpelleiderVibrate([150, 100, 150])}
+                  className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 hover:border-amber-500/40 hover:bg-slate-900 text-xs text-left font-medium text-slate-300 flex items-center justify-between transition cursor-pointer"
+                >
+                  <span className="truncate">📳 Korte tik trilling</span>
+                  <span className="text-[10px] text-amber-500 font-mono">150ms</span>
+                </button>
+                <button
+                  onClick={() => triggerSpelleiderVibrate([400, 200, 400])}
+                  className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 hover:border-amber-500/40 hover:bg-slate-900 text-xs text-left font-medium text-slate-300 flex items-center justify-between transition cursor-pointer"
+                >
+                  <span className="truncate">📳 Lange waarschuw-tril</span>
+                  <span className="text-[10px] text-amber-500 font-mono">400ms</span>
+                </button>
+                <button
+                  onClick={() => {
+                    sounds.playHeartbeat();
+                    triggerSpelleiderVibrate([100, 50, 100]);
+                  }}
+                  className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 hover:border-amber-500/40 hover:bg-slate-900 text-xs text-left font-medium text-slate-300 flex items-center justify-between transition cursor-pointer"
+                >
+                  <span className="truncate">💓 Hartslag + Tril</span>
+                  <span className="text-[10px] text-red-500 font-bold">LIVE</span>
+                </button>
+                <button
+                  onClick={() => {
+                    sounds.playSeerChime();
+                    triggerSpelleiderVibrate([100, 200, 100]);
+                  }}
+                  className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 hover:border-amber-500/40 hover:bg-slate-900 text-xs text-left font-medium text-slate-300 flex items-center justify-between transition cursor-pointer"
+                >
+                  <span className="truncate">✨ Kristal Chime</span>
+                  <span className="text-[10px] text-indigo-400 font-bold">INFO</span>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -928,6 +1265,78 @@ export const LocalGameMasterView: React.FC = () => {
 
           {/* Soundboard & Ambient Music */}
           <SoundBoard />
+        </div>
+      )}
+
+      {/* PERSISTENT GAME LOG / RECAP MODAL */}
+      {showLogModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
+          <div className="relative w-full max-w-2xl max-h-[85vh] bg-slate-950 border-2 border-amber-500 rounded-3xl shadow-2xl flex flex-col overflow-hidden text-slate-100">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 bg-slate-900 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">📜</span>
+                <div>
+                  <h3 className="text-lg font-cinzel font-bold text-white">Chronologisch Spellogboek</h3>
+                  <p className="text-xs text-slate-400">Historisch overzicht van alle gebeurtenissen en beslissingen in Wakkerdam</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowLogModal(false)}
+                className="p-2 rounded-full text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* List */}
+            <div className="p-6 overflow-y-auto space-y-3.5 flex-1 max-h-[60vh]">
+              {gameLog.length === 0 ? (
+                <p className="text-center text-slate-500 text-xs">Nog geen gebeurtenissen gelogd.</p>
+              ) : (
+                gameLog.map((log) => {
+                  let badgeStyle = 'bg-slate-900 text-slate-300 border-slate-800';
+                  if (log.type === 'death') badgeStyle = 'bg-red-950/80 text-red-300 border-red-800/50';
+                  if (log.type === 'mayor') badgeStyle = 'bg-amber-950/80 text-amber-300 border-amber-500/50';
+                  if (log.type === 'action') badgeStyle = 'bg-indigo-950/80 text-indigo-300 border-indigo-500/50';
+
+                  return (
+                    <div
+                      key={log.id}
+                      className="p-3 rounded-xl bg-slate-900/40 border border-slate-800/80 flex items-start justify-between gap-3 text-xs"
+                    >
+                      <div className="space-y-1">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${badgeStyle}`}>
+                          {log.timestamp}
+                        </span>
+                        <p className="text-slate-100 leading-relaxed font-medium">{log.message}</p>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 bg-slate-900/60 border-t border-slate-800 flex justify-end gap-2">
+              <button
+                onClick={() => {
+                  if (confirm('Wil je het logboek leegmaken?')) {
+                    setGameLog([{ id: '1', timestamp: 'Ronde 1', message: 'Logboek gereset door spelleider.', type: 'info' }]);
+                  }
+                }}
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-red-950/40 text-red-400 hover:bg-red-950 transition cursor-pointer"
+              >
+                Log Leegmaken
+              </button>
+              <button
+                onClick={() => setShowLogModal(false)}
+                className="px-5 py-2 rounded-xl bg-amber-500 text-slate-950 font-bold text-xs hover:bg-amber-400 transition cursor-pointer"
+              >
+                Sluiten
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

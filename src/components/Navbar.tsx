@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Moon, Volume2, BookOpen, Database, Users, Sparkles, RefreshCw, Copy, Check, Music } from 'lucide-react';
+import { Moon, Volume2, BookOpen, Database, Users, Sparkles, RefreshCw, Copy, Check, Music, History } from 'lucide-react';
 import { GameRoomState } from '../types/game';
 import { sounds } from '../utils/sound';
 
@@ -8,6 +8,7 @@ interface NavbarProps {
   isConnected: boolean;
   onOpenRules: () => void;
   onOpenSql: () => void;
+  onOpenRecap?: () => void;
   activeMode: 'online' | 'local';
   onSwitchMode: (mode: 'online' | 'local') => void;
   onLeaveRoom?: () => void;
@@ -18,6 +19,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   isConnected,
   onOpenRules,
   onOpenSql,
+  onOpenRecap,
   activeMode,
   onSwitchMode,
   onLeaveRoom,
@@ -71,7 +73,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div className="bg-slate-900 border border-slate-800 p-1 rounded-xl flex items-center text-xs">
             <button
               onClick={() => onSwitchMode('online')}
-              className={`px-2.5 py-1 rounded-lg font-medium transition ${
+              className={`px-2.5 py-1 rounded-lg font-medium transition cursor-pointer ${
                 activeMode === 'online'
                   ? 'bg-amber-500 text-slate-950 font-bold shadow-sm'
                   : 'text-slate-400 hover:text-white'
@@ -81,7 +83,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
             <button
               onClick={() => onSwitchMode('local')}
-              className={`px-2.5 py-1 rounded-lg font-medium transition ${
+              className={`px-2.5 py-1 rounded-lg font-medium transition cursor-pointer ${
                 activeMode === 'local'
                   ? 'bg-amber-500 text-slate-950 font-bold shadow-sm'
                   : 'text-slate-400 hover:text-white'
@@ -118,6 +120,18 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
           )}
 
+          {/* Game Recap / Timeline History Popup Button in top right */}
+          {onOpenRecap && (
+            <button
+              onClick={onOpenRecap}
+              className="p-2 sm:px-3 sm:py-1.5 rounded-xl bg-slate-900 border border-slate-800 hover:border-amber-500/40 text-slate-300 hover:text-amber-300 text-xs font-medium flex items-center gap-1.5 transition cursor-pointer"
+              title="Open Spel Recap, Doodsoorzaken & Tijdlijn"
+            >
+              <History className="w-4 h-4 text-amber-400" />
+              <span className="hidden sm:inline">Recap</span>
+            </button>
+          )}
+
           {/* Live Realtime (SQL Inspector) Button */}
           <button
             onClick={onOpenSql}
@@ -131,7 +145,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Rules / Role Guide */}
           <button
             onClick={onOpenRules}
-            className="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-white hover:border-slate-700 transition"
+            className="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-white hover:border-slate-700 transition cursor-pointer"
             title="Rollen & Spelregels"
           >
             <BookOpen className="w-4 h-4 text-amber-400" />
