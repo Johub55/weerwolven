@@ -2,6 +2,7 @@
   "name": "Weerwolven Spelleider & Live Kaart",
   "description": "Interactieve spelleider assistent en live multiplayer voor Weerwolven van Wakkerdam. Gebruik je telefoon als geheime rolkaart, beheer nachtfases en stem live mee!",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }
-
