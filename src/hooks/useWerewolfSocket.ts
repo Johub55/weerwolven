@@ -9,9 +9,12 @@ export function useWerewolfSocket() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [seerPeekResult, setSeerPeekResult] = useState<{ targetId: string; targetName: string; role: RoleId } | null>(null);
   const [sqlResult, setSqlResult] = useState<any | null>(null);
+  const [isServerUnreachable, setIsServerUnreachable] = useState<boolean>(false);
 
   const socketRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<any>(null);
+  const retryCountRef = useRef<number>(0);
+  const MAX_RETRIES = 3;
 
   const connect = useCallback(() => {
     if (
@@ -26,12 +29,17 @@ export function useWerewolfSocket() {
       reconnectTimerRef.current = null;
     }
 
+    const searchParams = new URLSearchParams(window.location.search);
+    const customServerParam = searchParams.get('server');
+
     const isGitHub = window.location.hostname.endsWith('github.io');
-    const backendHost = isGitHub 
+    const backendHost = customServerParam || (isGitHub 
       ? 'ais-pre-y6e6de6rmualeckslw6ovv-766620080537.europe-west2.run.app' 
-      : window.location.host;
-    const protocol = (window.location.protocol === 'https:' || isGitHub) ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${backendHost}/ws`;
+      : window.location.host);
+    
+    const protocol = (window.location.protocol === 'https:' || isGitHub || customServerParam?.startsWith('https')) ? 'wss:' : 'ws:';
+    const cleanHost = backendHost.replace(/^https?:\/\//, '').replace(/\/$/, '');
+    const wsUrl = `${protocol}//${cleanHost}/ws`;
 
     try {
       const ws = new WebSocket(wsUrl);
@@ -39,7 +47,9 @@ export function useWerewolfSocket() {
 
       ws.onopen = () => {
         setIsConnected(true);
+        setIsServerUnreachable(false);
         setErrorMessage(null);
+        retryCountRef.current = 0; // Reset retries on successful connection
 
         // Auto rejoin saved room if any
         const savedRoom = localStorage.getItem('ww_room_code');
@@ -108,11 +118,19 @@ export function useWerewolfSocket() {
       ws.onclose = () => {
         setIsConnected(false);
         socketRef.current = null;
-        if (!reconnectTimerRef.current) {
-          reconnectTimerRef.current = setTimeout(() => {
-            reconnectTimerRef.current = null;
-            connect();
-          }, 2000);
+
+        if (retryCountRef.current < MAX_RETRIES) {
+          const delay = Math.min(3000 * Math.pow(2, retryCountRef.current), 15000);
+          retryCountRef.current += 1;
+          
+          if (!reconnectTimerRef.current) {
+            reconnectTimerRef.current = setTimeout(() => {
+              reconnectTimerRef.current = null;
+              connect();
+            }, delay);
+          }
+        } else {
+          setIsServerUnreachable(true);
         }
       };
 
@@ -120,7 +138,9 @@ export function useWerewolfSocket() {
         setIsConnected(false);
       };
     } catch (e) {
-      console.warn('Socket connection attempt', e);
+      console.warn('Socket connection attempt exception', e);
+      setIsConnected(false);
+      setIsServerUnreachable(true);
     }
   }, []);
 
@@ -168,10 +188,18 @@ export function useWerewolfSocket() {
     window.location.reload();
   }, []);
 
+  const reconnect = useCallback(() => {
+    retryCountRef.current = 0;
+    setIsServerUnreachable(false);
+    connect();
+  }, [connect]);
+
   return {
     roomState,
     myPlayerId,
     isConnected,
+    isServerUnreachable,
+    reconnect,
     errorMessage,
     setErrorMessage,
     seerPeekResult,
