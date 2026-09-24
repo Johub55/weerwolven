@@ -33,11 +33,17 @@ export function useWerewolfSocket() {
     const customServerParam = searchParams.get('server');
 
     const isGitHub = window.location.hostname.endsWith('github.io');
-    const backendHost = customServerParam || (isGitHub 
-      ? 'ais-pre-y6e6de6rmualeckslw6ovv-766620080537.europe-west2.run.app' 
-      : window.location.host);
-    
-    const protocol = (window.location.protocol === 'https:' || isGitHub || customServerParam?.startsWith('https')) ? 'wss:' : 'ws:';
+
+    // On GitHub Pages (static host), if no custom server backend is passed via ?server=URL,
+    // do not attempt WebSocket connection to avoid browser WSS failure logs.
+    if (isGitHub && !customServerParam) {
+      setIsConnected(false);
+      setIsServerUnreachable(true);
+      return;
+    }
+
+    const backendHost = customServerParam || window.location.host;
+    const protocol = (window.location.protocol === 'https:' || customServerParam?.startsWith('https')) ? 'wss:' : 'ws:';
     const cleanHost = backendHost.replace(/^https?:\/\//, '').replace(/\/$/, '');
     const wsUrl = `${protocol}//${cleanHost}/ws`;
 
