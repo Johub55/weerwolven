@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { GameRoomState, WsClientAction, WsServerMessage, RoleId } from '../types/game';
 import { sounds } from '../utils/sound';
+import { executeLocalSql } from '../utils/localSqlEngine';
 
 export function useWerewolfSocket() {
   const [roomState, setRoomState] = useState<GameRoomState | null>(null);
@@ -154,10 +155,26 @@ export function useWerewolfSocket() {
   const sendAction = useCallback((action: WsClientAction) => {
     if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
       socketRef.current.send(JSON.stringify(action));
+      // For immediate response feedback on SQL in UI, also generate local fallback if needed
+      if (action.type === 'EXECUTE_SQL') {
+        const localRes = executeLocalSql(action.payload.query, roomState);
+        setSqlResult(localRes);
+        if (localRes.updatedRoomState) {
+          setRoomState(localRes.updatedRoomState);
+        }
+      }
     } else {
-      console.warn('Socket not open');
+      if (action.type === 'EXECUTE_SQL') {
+        const localRes = executeLocalSql(action.payload.query, roomState);
+        setSqlResult(localRes);
+        if (localRes.updatedRoomState) {
+          setRoomState(localRes.updatedRoomState);
+        }
+      } else {
+        // Suppress raw console spam when socket is not open during reconnect or offline
+      }
     }
-  }, []);
+  }, [roomState]);
 
   const createRoom = useCallback(
     (hostName: string) => {

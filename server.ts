@@ -3,7 +3,7 @@ import http from 'http';
 import path from 'path';
 import { WebSocketServer, WebSocket } from 'ws';
 import { GameRoomState, Player, RoleId, Phase, GameLog, WsClientAction, WsServerMessage, GameSettings } from './src/types/game';
-import { ALL_ROLES } from './src/utils/roles';
+import { ALL_ROLES, ROLE_LIMITS } from './src/utils/roles';
 
 const app = express();
 const server = http.createServer(app);
@@ -448,6 +448,17 @@ function handleClientAction(ws: WebSocket, meta: SocketMeta, action: WsClientAct
 
       // Deal roles randomly
       const deck = [...room.selectedDeck];
+      
+      // Enforce ROLE_LIMITS
+      const roleCounts: Record<string, number> = {};
+      for (const roleId of deck) {
+        roleCounts[roleId] = (roleCounts[roleId] || 0) + 1;
+        if (roleCounts[roleId] > (ROLE_LIMITS[roleId as RoleId] || 1)) {
+          ws.send(JSON.stringify({ type: 'ERROR', payload: { message: `Te veel spelers met rol: ${ALL_ROLES[roleId as RoleId]?.dutchName || roleId}!` } }));
+          return;
+        }
+      }
+
       while (deck.length < room.players.length) {
         deck.push('burger'); // pad with villagers if deck smaller than players
       }

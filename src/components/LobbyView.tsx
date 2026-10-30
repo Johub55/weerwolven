@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import QRCode from 'qrcode';
 import { GameRoomState, RoleId, GameSettings } from '../types/game';
-import { ALL_ROLES, PLAYABLE_SECRET_ROLES, DECK_PRESETS } from '../utils/roles';
+import { ALL_ROLES, PLAYABLE_SECRET_ROLES, DECK_PRESETS, ROLE_LIMITS } from '../utils/roles';
 import { Play, Users, Sparkles, Copy, Check, QrCode, Shield, Settings2, Plus, Minus, Crown, ArrowRight } from 'lucide-react';
 import { sounds } from '../utils/sound';
 
@@ -72,6 +72,9 @@ export const LobbyView: React.FC<LobbyViewProps> = ({
 
   const handleAddRoleToDeck = (roleId: RoleId) => {
     if (!roomState || !isHost) return;
+    const count = roomState.selectedDeck.filter((id) => id === roleId).length;
+    if (count >= (ROLE_LIMITS[roleId] || 1)) return;
+    
     const newDeck = [...roomState.selectedDeck, roleId];
     onUpdateDeck(newDeck);
   };
@@ -416,7 +419,11 @@ export const LobbyView: React.FC<LobbyViewProps> = ({
                       </button>
                       <button
                         onClick={() => handleAddRoleToDeck('burger')}
-                        className="px-2.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center gap-1"
+                        className={`px-2.5 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1 ${
+                          roomState.selectedDeck.filter((r) => r === 'burger').length >= (ROLE_LIMITS['burger'] || 1)
+                            ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                            : 'bg-amber-500 hover:bg-amber-400 text-slate-950'
+                        }`}
                         title="1 Burger toevoegen"
                       >
                         <Plus className="w-3 h-3" /> Toevoegen
@@ -448,7 +455,11 @@ export const LobbyView: React.FC<LobbyViewProps> = ({
                       </button>
                       <button
                         onClick={() => handleAddRoleToDeck('weerwolf')}
-                        className="px-2.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold text-xs flex items-center gap-1"
+                        className={`px-2.5 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1 ${
+                          roomState.selectedDeck.filter((r) => r === 'weerwolf').length >= (ROLE_LIMITS['weerwolf'] || 1)
+                            ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                            : 'bg-red-600 hover:bg-red-500 text-white'
+                        }`}
                         title="1 Weerwolf toevoegen"
                       >
                         <Plus className="w-3 h-3" /> Toevoegen
@@ -488,8 +499,11 @@ export const LobbyView: React.FC<LobbyViewProps> = ({
                     <button
                       key={r.id}
                       onClick={() => handleAddRoleToDeck(r.id)}
+                      disabled={count >= (ROLE_LIMITS[r.id] || 1)}
                       className={`flex items-center justify-between p-2.5 rounded-xl border text-xs text-left transition hover:bg-slate-900 cursor-pointer ${
-                        count > 0
+                        count >= (ROLE_LIMITS[r.id] || 1)
+                          ? 'opacity-50 cursor-not-allowed bg-slate-950 border-slate-800'
+                          : count > 0
                           ? 'bg-slate-900/90 border-amber-500/50'
                           : 'bg-slate-950 border-slate-800 hover:border-amber-500/40'
                       }`}

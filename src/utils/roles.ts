@@ -443,6 +443,31 @@ export const ALL_ROLES: Record<RoleId, RoleDefinition> = {
   },
 };
 
+export const ROLE_LIMITS: Record<RoleId, number> = {
+  burger: 50,
+  weerwolf: 5,
+  zienster: 1,
+  heks: 1,
+  jager: 1,
+  cupido: 1,
+  beschermer: 1,
+  dief: 1,
+  dorpsoudste: 1,
+  meisje: 1,
+  fluitspeler: 1,
+  witte_weerwolf: 1,
+  wilde_kind: 1,
+  zondebok: 1,
+  dorpsgek: 1,
+  genezer: 1,
+  babbelzieke_weerwolf: 1,
+  grote_boze_wolf: 1,
+  sater: 1,
+  zigeunerin: 1,
+  burgemeester: 1,
+  onbekend: 10,
+};
+
 /**
  * List of playable secret character cards for deck selection (excludes honorary titles & placeholders)
  */
