@@ -1305,9 +1305,11 @@ server.on('upgrade', (request, socket, head) => {
   if (url.startsWith('/@vite') || url.includes('vite-hmr') || url.includes('vite')) {
     return;
   }
-  wss.handleUpgrade(request, socket, head, (ws) => {
-    wss.emit('connection', ws, request);
-  });
+  if (url === '/ws') {
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      wss.emit('connection', ws, request);
+    });
+  }
 });
 
 // Full-stack Vite development middleware
